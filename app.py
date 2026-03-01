@@ -138,6 +138,7 @@ def create_game():
         'doubled': set(),
         'insurance': {},
         'insurance_offered': False
+        'insurance_responded': set()
     }
     
     players[sid] = {'room': room_id, 'seat': None, 'is_host': True}
@@ -331,8 +332,8 @@ def place_insurance(data):
     if not game['insurance_offered']:
         return
     
-    if seat in game['insurance']:
-        emit('error', {'message': 'Вы уже сделали страховку'})
+    if seat in game['insurance_responded']:
+        emit('error', {'message': 'Вы уже ответили на страховку'})
         return
     
     take_insurance = data.get('take', False)
@@ -348,10 +349,12 @@ def place_insurance(data):
         game['balances'][seat] -= insurance_amount
         game['insurance'][seat] = insurance_amount
     
+    game['insurance_responded'].add(seat)
+    
     active_players = [s for s, pid in game['seats'].items() 
                      if pid and pid not in game['disconnected'] and s in game['bets']]
     
-    if all(s in game['insurance'] or game['bets'].get(s, 0) == 0 for s in active_players):
+    if all(s in game['insurance_responded'] for s in active_players):
         game['insurance_offered'] = False
         game['message'] = 'Ваш ход'
         broadcast_state(room)
@@ -628,6 +631,7 @@ def new_round():
     game['doubled'] = set()
     game['insurance'] = {}
     game['insurance_offered'] = False
+    game['insurance_responded'] = set()
     
     if len(game['deck'].cards) < 20:
         game['deck'] = Deck()
@@ -650,6 +654,33 @@ def cheat_balance(data):
         games[room]['balances'][seat] = amount
     
     broadcast_state(room)
+    
+@socketio.on('cheat_set_player_balance')
+def cheat_set_player_balance(data):
+    sid = request.sid
+    if sid not in players:
+        return
+    
+    if not players[sid].get('is_host'):
+        emit('error', {'message': 'Только создатель может менять баланс'})
+        return
+    
+    room = players[sid]['room']
+    game = games[room]
+    
+    target_seat = data.get('seat')
+    amount = data.get('amount', 1000)
+    
+    if target_seat not in [1, 2, 3, 4]:
+        emit('error', {'message': 'Неверное место'})
+        return
+    
+    if game['seats'][target_seat] is not None:
+        game['balances'][target_seat] = amount
+        broadcast_state(room)
+        emit('cheat_status', {'message': f'Баланс игрока {target_seat} установлен: ${amount}'})
+    else:
+        emit('error', {'message': 'Место пустое'})
 
 @socketio.on('cheat_rigged')
 def cheat_rigged(data):

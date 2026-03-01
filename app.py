@@ -894,7 +894,7 @@ def broadcast_state(room_id):
             'current_split_hand': {}
         }
         
-        # Добавляем данные о сплите если есть
+        # Добавляем данные о сплите если есть (для всех, включая хоста)
         if seat in game['split_hands']:
             data['split_hands'] = {
                 'hands': [
@@ -908,12 +908,40 @@ def broadcast_state(room_id):
             data['split_bets'] = game['split_bets'].get(seat, 0)
         
         other_hands = {}
+        
+        # Добавляем обычные руки других игроков
         for s, hand in game['hands'].items():
             other_hands[s] = {
                 'cards': [c.to_dict() for c in hand.cards],
                 'value': hand.value,
                 'count': len(hand.cards)
             }
+        
+        # ДОБАВЛЯЕМ: Сплит-руки других игроков для отображения у хоста и других игроков
+        for s in game['split_hands']:
+            if s != seat:  # Не добавляем свои сплит-руки в other_hands
+                split_data = {
+                    'cards': [],
+                    'value': 0,
+                    'count': 0,
+                    'is_split': True,
+                    'hands': []
+                }
+                for idx, h in enumerate(game['split_hands'][s]):
+                    hand_data = {
+                        'cards': [c.to_dict() for c in h.cards],
+                        'value': h.value,
+                        'is_active': idx == game['current_split_hand'].get(s, 0)
+                    }
+                    split_data['hands'].append(hand_data)
+                    # Для совместимости показываем активную руку как основную
+                    if idx == game['current_split_hand'].get(s, 0):
+                        split_data['cards'] = [c.to_dict() for c in h.cards]
+                        split_data['value'] = h.value
+                        split_data['count'] = len(h.cards)
+                
+                other_hands[s] = split_data
+        
         data['other_hands'] = other_hands
         
         if is_host and game['host_hand']:

@@ -138,7 +138,10 @@ def create_game():
         'doubled': set(),
         'insurance': {},
         'insurance_offered': False,
-        'insurance_responded': set()
+        'insurance_responded': set(),
+        'split_hands': {},
+        'split_bets': {},
+        'current_split_hand': {}
     }
     
     players[sid] = {'room': room_id, 'seat': None, 'is_host': True}
@@ -361,6 +364,68 @@ def place_insurance(data):
     else:
         broadcast_state(room)
 
+@socketio.on('player_split')
+def player_split():
+    sid = request.sid
+    if sid not in players:
+        return
+        
+    room = players[sid]['room']
+    seat = players[sid]['seat']
+    game = games[room]
+    
+    if game['state'] != GameState.PLAYING:
+        return
+    if game['current_turn'] != seat:
+        return
+    
+    if seat in game['split_hands']:
+        emit('error', {'message': 'Вы уже сплитовали'})
+        return
+    
+    hand = game['hands'][seat]
+    
+    # Проверяем что 2 карты и они одинаковые по значению
+    if len(hand.cards) != 2:
+        emit('error', {'message': 'Сплит можно только с 2 картами'})
+        return
+    
+    card1_val = hand.cards[0].value
+    card2_val = hand.cards[1].value
+    
+    # Проверяем что значения одинаковые (2-2, K-K, A-A и т.д.)
+    if card1_val != card2_val:
+        emit('error', {'message': 'Карты должны быть одинакового значения'})
+        return
+    
+    current_bet = game['bets'][seat]
+    
+    if game['balances'][seat] < current_bet:
+        emit('error', {'message': 'Недостаточно средств для сплита'})
+        return
+    
+    # Списываем деньги за вторую руку
+    game['balances'][seat] -= current_bet
+    
+    # Создаем две новые руки
+    hand1 = Hand()
+    hand1.add(hand.cards[0])
+    hand1.add(game['deck'].deal())
+    
+    hand2 = Hand()
+    hand2.add(hand.cards[1])
+    hand2.add(game['deck'].deal())
+    
+    # Сохраняем сплит-руки
+    game['split_hands'][seat] = [hand1, hand2]
+    game['split_bets'][seat] = current_bet
+    game['current_split_hand'][seat] = 0  # Играем сначала первую руку (0)
+    
+    # Удаляем оригинальную руку
+    del game['hands'][seat]
+    
+    broadcast_state(room)
+
 @socketio.on('player_hit')
 def player_hit():
     sid = request.sid
@@ -384,26 +449,57 @@ def player_hit():
         emit('error', {'message': 'Вы уже удвоили, больше карт нельзя'})
         return
     
-    hand = game['hands'][seat]
-    deck = game['deck']
-    
-    host_sid = game['host_sid']
-    bust_targets = cheat_modes.get(host_sid, {}).get('bust_targets', [])
-    
-    if seat in bust_targets:
-        bust_card = find_bust_card(deck, hand.value)
-        if bust_card:
-            hand.add(bust_card)
+    # Проверяем есть ли сплит
+    if seat in game['split_hands']:
+        split_idx = game['current_split_hand'][seat]
+        hand = game['split_hands'][seat][split_idx]
+        deck = game['deck']
+        
+        host_sid = game['host_sid']
+        bust_targets = cheat_modes.get(host_sid, {}).get('bust_targets', [])
+        
+        if seat in bust_targets:
+            bust_card = find_bust_card(deck, hand.value)
+            if bust_card:
+                hand.add(bust_card)
+            else:
+                hand.add(deck.deal())
         else:
             hand.add(deck.deal())
+        
+        # Если перебор - переходим к следующей руке или заканчиваем
+        if hand.is_bust:
+            if split_idx == 0 and len(game['split_hands'][seat]) > 1:
+                # Переходим ко второй руке
+                game['current_split_hand'][seat] = 1
+            else:
+                # Все руки сыграны
+                game['finished_players'].add(seat)
+                next_player(room)
+        else:
+            broadcast_state(room)
     else:
-        hand.add(deck.deal())
-    
-    if hand.is_bust:
-        game['finished_players'].add(seat)
-        next_player(room)
-    else:
-        broadcast_state(room)
+        # Обычная логика без сплита
+        hand = game['hands'][seat]
+        deck = game['deck']
+        
+        host_sid = game['host_sid']
+        bust_targets = cheat_modes.get(host_sid, {}).get('bust_targets', [])
+        
+        if seat in bust_targets:
+            bust_card = find_bust_card(deck, hand.value)
+            if bust_card:
+                hand.add(bust_card)
+            else:
+                hand.add(deck.deal())
+        else:
+            hand.add(deck.deal())
+        
+        if hand.is_bust:
+            game['finished_players'].add(seat)
+            next_player(room)
+        else:
+            broadcast_state(room)
 
 def find_bust_card(deck, current_value):
     need = 22 - current_value
@@ -431,8 +527,21 @@ def player_stand():
     if game['current_turn'] != seat:
         return
     
-    game['finished_players'].add(seat)
-    next_player(room)
+    # Проверяем есть ли сплит
+    if seat in game['split_hands']:
+        split_idx = game['current_split_hand'][seat]
+        
+        if split_idx == 0 and len(game['split_hands'][seat]) > 1:
+            # Переходим ко второй руке
+            game['current_split_hand'][seat] = 1
+            broadcast_state(room)
+        else:
+            # Все руки сыграны
+            game['finished_players'].add(seat)
+            next_player(room)
+    else:
+        game['finished_players'].add(seat)
+        next_player(room)
 
 @socketio.on('player_double')
 def player_double():
@@ -483,7 +592,7 @@ def next_player(room_id):
     
     found_next = False
     for i in range(current_idx + 1, len(active_players)):
-        if active_players[i] not in game['finished_players'] and not game['hands'][active_players[i]].is_bust:
+        if active_players[i] not in game['finished_players'] and not game['hands'].get(active_players[i], Hand()).is_bust:
             game['current_turn'] = active_players[i]
             game['message'] = 'Ваш ход'
             found_next = True
@@ -562,7 +671,55 @@ def finish_round(room_id):
     for seat in game['seats']:
         if game['seats'][seat] is None:
             continue
+        
+        # Обработка сплит-рук
+        if seat in game['split_hands']:
+            total_winnings = 0
+            total_bet = 0
             
+            for idx, hand in enumerate(game['split_hands'][seat]):
+                bet = game['split_bets'][seat]
+                total_bet += bet
+                val = hand.value
+                player_blackjack = hand.is_blackjack
+                
+                if hand.is_bust:
+                    total_winnings -= bet
+                    game['host_balance'] += bet
+                elif host_bust:
+                    if player_blackjack:
+                        total_winnings += int(bet * 1.5)
+                        game['host_balance'] -= int(bet * 1.5)
+                    else:
+                        total_winnings += bet
+                        game['host_balance'] -= bet
+                elif player_blackjack and not host_blackjack:
+                    total_winnings += int(bet * 1.5)
+                    game['host_balance'] -= int(bet * 1.5)
+                elif host_blackjack and not player_blackjack:
+                    total_winnings -= bet
+                    game['host_balance'] += bet
+                elif val > host_val:
+                    total_winnings += bet
+                    game['host_balance'] -= bet
+                elif val < host_val:
+                    total_winnings -= bet
+                    game['host_balance'] += bet
+                
+            # Обновляем баланс игрока
+            game['balances'][seat] += total_bet + total_winnings
+            
+            # Определяем результат для отображения
+            if total_winnings > 0:
+                results[seat] = 'win'
+            elif total_winnings < 0:
+                results[seat] = 'lose'
+            else:
+                results[seat] = 'push'
+            
+            continue
+        
+        # Обычная обработка
         hand = game['hands'][seat]
         bet = game['bets'].get(seat, 0)
         val = hand.value
@@ -632,6 +789,9 @@ def new_round():
     game['insurance'] = {}
     game['insurance_offered'] = False
     game['insurance_responded'] = set()
+    game['split_hands'] = {}
+    game['split_bets'] = {}
+    game['current_split_hand'] = {}
     
     if len(game['deck'].cards) < 20:
         game['deck'] = Deck()
@@ -728,8 +888,24 @@ def broadcast_state(room_id):
             'host_balance': game['host_balance'],
             'insurance_offered': game.get('insurance_offered', False),
             'insurance': game.get('insurance', {}),
-            'doubled': list(game.get('doubled', set()))
+            'doubled': list(game.get('doubled', set())),
+            'split_hands': {},
+            'split_bets': {},
+            'current_split_hand': {}
         }
+        
+        # Добавляем данные о сплите если есть
+        if seat in game['split_hands']:
+            data['split_hands'] = {
+                'hands': [
+                    {
+                        'cards': [c.to_dict() for c in h.cards],
+                        'value': h.value
+                    } for h in game['split_hands'][seat]
+                ],
+                'current_idx': game['current_split_hand'].get(seat, 0)
+            }
+            data['split_bets'] = game['split_bets'].get(seat, 0)
         
         other_hands = {}
         for s, hand in game['hands'].items():

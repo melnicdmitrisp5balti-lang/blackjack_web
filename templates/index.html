@@ -487,6 +487,8 @@
             flex-wrap: nowrap;
             min-height: var(--card-height);
             position: relative;
+            flex-direction: column;
+            align-items: center;
         }
         
         .player-cards .card { 
@@ -1543,7 +1545,39 @@
                 cardsEl.innerHTML = '';
                 
                 const hand = data.other_hands && data.other_hands[i];
-                if (hand && hand.cards && hand.cards.length > 0) {
+                
+                // Проверяем есть ли сплит у этого игрока
+                if (hand && hand.is_split && hand.hands) {
+                    // Отображаем сплит-руки
+                    hand.hands.forEach((h, idx) => {
+                        const handDiv = document.createElement('div');
+                        handDiv.style.cssText = 'display: flex; margin-bottom: 5px; position: relative; padding: 3px;';
+                        
+                        if (h.is_active) {
+                            handDiv.style.boxShadow = '0 0 10px #FFD700';
+                            handDiv.style.borderRadius = '6px';
+                            handDiv.style.background = 'rgba(255,215,0,0.1)';
+                        } else {
+                            handDiv.style.opacity = '0.6';
+                        }
+                        
+                        h.cards.forEach(card => {
+                            handDiv.appendChild(createCard(card));
+                        });
+                        
+                        // Значение руки
+                        const valDiv = document.createElement('div');
+                        valDiv.style.cssText = 'position: absolute; right: -35px; top: 50%; transform: translateY(-50%); background: #1a5f1a; border: 2px solid #FFD700; color: #FFD700; min-width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.8rem;';
+                        valDiv.textContent = h.value;
+                        handDiv.appendChild(valDiv);
+                        
+                        cardsEl.appendChild(handDiv);
+                    });
+                    
+                    scoreEl.textContent = hand.value;
+                    scoreEl.classList.remove('hidden');
+                } else if (hand && hand.cards && hand.cards.length > 0) {
+                    // Обычная рука
                     hand.cards.forEach(card => {
                         cardsEl.appendChild(createCard(card));
                     });
@@ -1579,7 +1613,7 @@
                 }
             }
             
-            // Показываем сплит-руки если есть
+            // Показываем сплит-руки если есть (для своего места)
             if (!state.isHost && data.split_hands && data.split_hands.hands) {
                 const myCardsEl = document.getElementById(`cards-${state.seat}`);
                 myCardsEl.innerHTML = '';
@@ -1614,6 +1648,7 @@
                 scoreEl.textContent = data.split_hands.hands[data.split_hands.current_idx].value;
                 scoreEl.classList.remove('hidden');
             } else if (!state.isHost && data.your_hand && data.your_hand.cards) {
+                // Обычная рука (без сплита)
                 const myCardsEl = document.getElementById(`cards-${state.seat}`);
                 myCardsEl.innerHTML = '';
                 data.your_hand.cards.forEach(card => {

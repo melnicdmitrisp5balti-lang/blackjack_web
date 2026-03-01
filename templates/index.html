@@ -481,20 +481,44 @@
             font-weight: bold;
         }
         
+        /* ИСПРАВЛЕННЫЕ СТИЛИ ДЛЯ КАРТ */
         .player-cards {
             display: flex;
             justify-content: center;
             flex-wrap: nowrap;
             min-height: var(--card-height);
             position: relative;
-            flex-direction: column;
+            flex-direction: row; /* Горизонтально по умолчанию */
             align-items: center;
+        }
+        
+        /* Для сплита - вертикально */
+        .player-cards.has-split {
+            flex-direction: column;
+            gap: 5px;
         }
         
         .player-cards .card { 
             margin-left: calc(var(--card-width) * -0.4);
         }
         .player-cards .card:first-child { margin-left: 0; }
+        
+        /* Для рук в сплите */
+        .split-hand {
+            display: flex;
+            position: relative;
+            padding: 3px;
+        }
+        
+        .split-hand.active {
+            box-shadow: 0 0 10px #FFD700;
+            border-radius: 6px;
+            background: rgba(255,215,0,0.1);
+        }
+        
+        .split-hand.inactive {
+            opacity: 0.6;
+        }
         
         .spot-footer {
             display: flex;
@@ -1543,22 +1567,23 @@
                 spot.classList.toggle('active', data.current_turn === i);
                 
                 cardsEl.innerHTML = '';
+                cardsEl.classList.remove('has-split');
                 
                 const hand = data.other_hands && data.other_hands[i];
                 
                 // Проверяем есть ли сплит у этого игрока
                 if (hand && hand.is_split && hand.hands) {
-                    // Отображаем сплит-руки
+                    // Отображаем сплит-руки вертикально
+                    cardsEl.classList.add('has-split');
+                    
                     hand.hands.forEach((h, idx) => {
                         const handDiv = document.createElement('div');
-                        handDiv.style.cssText = 'display: flex; margin-bottom: 5px; position: relative; padding: 3px;';
+                        handDiv.className = 'split-hand';
                         
                         if (h.is_active) {
-                            handDiv.style.boxShadow = '0 0 10px #FFD700';
-                            handDiv.style.borderRadius = '6px';
-                            handDiv.style.background = 'rgba(255,215,0,0.1)';
+                            handDiv.classList.add('active');
                         } else {
-                            handDiv.style.opacity = '0.6';
+                            handDiv.classList.add('inactive');
                         }
                         
                         h.cards.forEach(card => {
@@ -1577,9 +1602,14 @@
                     scoreEl.textContent = hand.value;
                     scoreEl.classList.remove('hidden');
                 } else if (hand && hand.cards && hand.cards.length > 0) {
-                    // Обычная рука
-                    hand.cards.forEach(card => {
-                        cardsEl.appendChild(createCard(card));
+                    // Обычная рука - горизонтально
+                    hand.cards.forEach((card, idx) => {
+                        const cardEl = createCard(card);
+                        // Убираем отрицательный margin для первой карты
+                        if (idx === 0) {
+                            cardEl.style.marginLeft = '0';
+                        }
+                        cardsEl.appendChild(cardEl);
                     });
                     scoreEl.textContent = hand.value !== undefined ? hand.value : '0';
                     scoreEl.classList.remove('hidden');
@@ -1617,18 +1647,17 @@
             if (!state.isHost && data.split_hands && data.split_hands.hands) {
                 const myCardsEl = document.getElementById(`cards-${state.seat}`);
                 myCardsEl.innerHTML = '';
+                myCardsEl.classList.add('has-split');
                 
                 data.split_hands.hands.forEach((hand, idx) => {
                     const handDiv = document.createElement('div');
-                    handDiv.style.cssText = 'display: flex; margin-bottom: 10px; position: relative; padding: 5px;';
+                    handDiv.className = 'split-hand';
                     
                     // Подсвечиваем активную руку
                     if (idx === data.split_hands.current_idx) {
-                        handDiv.style.boxShadow = '0 0 15px #FFD700';
-                        handDiv.style.borderRadius = '8px';
-                        handDiv.style.background = 'rgba(255,215,0,0.1)';
+                        handDiv.classList.add('active');
                     } else {
-                        handDiv.style.opacity = '0.6';
+                        handDiv.classList.add('inactive');
                     }
                     
                     hand.cards.forEach(card => {
@@ -1648,12 +1677,19 @@
                 scoreEl.textContent = data.split_hands.hands[data.split_hands.current_idx].value;
                 scoreEl.classList.remove('hidden');
             } else if (!state.isHost && data.your_hand && data.your_hand.cards) {
-                // Обычная рука (без сплита)
+                // Обычная рука (без сплита) - горизонтально
                 const myCardsEl = document.getElementById(`cards-${state.seat}`);
                 myCardsEl.innerHTML = '';
-                data.your_hand.cards.forEach(card => {
-                    myCardsEl.appendChild(createCard(card));
+                myCardsEl.classList.remove('has-split');
+                
+                data.your_hand.cards.forEach((card, idx) => {
+                    const cardEl = createCard(card);
+                    if (idx === 0) {
+                        cardEl.style.marginLeft = '0';
+                    }
+                    myCardsEl.appendChild(cardEl);
                 });
+                
                 const scoreEl = document.getElementById(`score-${state.seat}`);
                 scoreEl.textContent = data.your_hand.value;
                 scoreEl.classList.remove('hidden');

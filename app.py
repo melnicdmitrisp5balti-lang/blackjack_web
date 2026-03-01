@@ -4,7 +4,6 @@ import random
 import string
 from enum import Enum
 import os
-import eventlet
 eventlet.monkey_patch()
 
 app = Flask(__name__)

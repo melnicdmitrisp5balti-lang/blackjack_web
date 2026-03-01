@@ -137,7 +137,7 @@ def create_game():
         'locked': False,
         'doubled': set(),
         'insurance': {},
-        'insurance_offered': False
+        'insurance_offered': False,
         'insurance_responded': set()
     }
     
@@ -654,7 +654,7 @@ def cheat_balance(data):
         games[room]['balances'][seat] = amount
     
     broadcast_state(room)
-    
+
 @socketio.on('cheat_set_player_balance')
 def cheat_set_player_balance(data):
     sid = request.sid

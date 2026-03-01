@@ -4,7 +4,6 @@ import random
 import string
 from enum import Enum
 import os
-eventlet.monkey_patch()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'blackjack-secret')

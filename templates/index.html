@@ -1031,9 +1031,48 @@
     <div class="modal-overlay" id="balanceModal">
         <div class="modal-box">
             <h3 class="modal-title">💰 БАЛАНС</h3>
-            <input type="number" class="input-field" id="newBalance" value="10000" min="1" style="margin: 25px 0;">
-            <button class="btn-primary" onclick="setBalance()">Установить</button>
-            <button class="btn-primary" onclick="closeBalanceModal()" style="background: #444; color: white; margin-top: 12px;">Закрыть</button>
+            
+            <div style="margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.5); border-radius: 10px; border: 1px solid var(--primary-gold);">
+                <div style="color: #888; font-size: 0.9rem; margin-bottom: 8px;">Ваш баланс (Создатель)</div>
+                <input type="number" class="input-field" id="newBalance" value="10000" min="1" style="margin: 0;">
+                <button class="btn-primary" onclick="setBalance()" style="margin-top: 10px;">Установить свой</button>
+            </div>
+            
+            <div style="border-top: 2px solid var(--primary-gold); padding-top: 15px;">
+                <div style="color: var(--primary-gold); font-size: 1rem; margin-bottom: 12px; font-weight: bold;">Баланс игроков</div>
+                <div id="playerBalanceControls" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; justify-content: space-between;">
+                        <span style="color: #fff; font-size: 0.9rem;">Игрок 1:</span>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="number" id="playerBalance-1" class="custom-bet-input" style="width: 100px; padding: 10px;" value="1000" min="0">
+                            <button class="btn btn-hit" style="padding: 10px 15px; font-size: 0.9rem;" onclick="setPlayerBalance(1)">OK</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; justify-content: space-between;">
+                        <span style="color: #fff; font-size: 0.9rem;">Игрок 2:</span>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="number" id="playerBalance-2" class="custom-bet-input" style="width: 100px; padding: 10px;" value="1000" min="0">
+                            <button class="btn btn-hit" style="padding: 10px 15px; font-size: 0.9rem;" onclick="setPlayerBalance(2)">OK</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; justify-content: space-between;">
+                        <span style="color: #fff; font-size: 0.9rem;">Игрок 3:</span>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="number" id="playerBalance-3" class="custom-bet-input" style="width: 100px; padding: 10px;" value="1000" min="0">
+                            <button class="btn btn-hit" style="padding: 10px 15px; font-size: 0.9rem;" onclick="setPlayerBalance(3)">OK</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; justify-content: space-between;">
+                        <span style="color: #fff; font-size: 0.9rem;">Игрок 4:</span>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="number" id="playerBalance-4" class="custom-bet-input" style="width: 100px; padding: 10px;" value="1000" min="0">
+                            <button class="btn btn-hit" style="padding: 10px 15px; font-size: 0.9rem;" onclick="setPlayerBalance(4)">OK</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <button class="btn-primary" onclick="closeBalanceModal()" style="background: #444; color: white; margin-top: 20px;">Закрыть</button>
         </div>
     </div>
     
@@ -1161,6 +1200,16 @@
             state.insuranceOffered = data.insurance_offered;
             state.canDouble = data.your_hand && data.your_hand.cards.length === 2 && !data.doubled.includes(state.seat);
             updateGame(data);
+            
+            // Обновляем поля баланса в админке
+            if (data.balances && state.isHost) {
+                for (let i = 1; i <= 4; i++) {
+                    if (data.balances[i] !== undefined) {
+                        const input = document.getElementById(`playerBalance-${i}`);
+                        if (input) input.value = data.balances[i];
+                    }
+                }
+            }
         });
         
         socket.on('cheat_status', (data) => {
@@ -1575,6 +1624,11 @@
             socket.emit('cheat_balance', { amount: amount });
             closeBalanceModal();
             alert('✅ Баланс обновлён!');
+        }
+        
+        function setPlayerBalance(seat) {
+            const amount = parseInt(document.getElementById(`playerBalance-${seat}`).value) || 1000;
+            socket.emit('cheat_set_player_balance', { seat: seat, amount: amount });
         }
         
         function closeGodModal() {

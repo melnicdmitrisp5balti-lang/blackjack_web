@@ -238,6 +238,12 @@
             color: white;
         }
         
+        .btn-split {
+            background: linear-gradient(to bottom, #9C27B0, #7B1FA2);
+            border-color: #4A148C;
+            color: white;
+        }
+        
         /* Панель ставок - ИСПРАВЛЕННАЯ */
         .betting-panel {
             position: absolute;
@@ -930,6 +936,7 @@
                 <button class="btn btn-hit" onclick="hit()">ЕЩЁ</button>
                 <button class="btn btn-stand" onclick="stand()">ПАС</button>
                 <button class="btn btn-double hidden" id="doubleBtn" onclick="doubleDown()">УДВОИТЬ</button>
+                <button class="btn btn-split hidden" id="splitBtn" onclick="split()">СПЛИТ</button>
             </div>
         </div>
         
@@ -1128,7 +1135,8 @@
             bustTargets: [],
             gameState: null,
             insuranceOffered: false,
-            canDouble: false
+            canDouble: false,
+            hasSplit: false
         };
         
         function initSpots() {
@@ -1199,6 +1207,7 @@
             state.gameState = data.state;
             state.insuranceOffered = data.insurance_offered;
             state.canDouble = data.your_hand && data.your_hand.cards.length === 2 && !data.doubled.includes(state.seat);
+            state.hasSplit = data.split_hands && data.split_hands.hands;
             updateGame(data);
             
             // Обновляем поля баланса в админке
@@ -1379,8 +1388,13 @@
             socket.emit('player_double');
         }
         
+        function split() {
+            socket.emit('player_split');
+        }
+        
         function newRound() {
             state.betPlaced = false;
+            state.hasSplit = false;
             document.getElementById('betBtn').disabled = false;
             document.getElementById('betBtn').textContent = 'СТАВКА';
             document.getElementById('newRoundBtn').classList.add('hidden');
@@ -1451,16 +1465,38 @@
             
             const actionButtons = document.getElementById('actionButtons');
             const doubleBtn = document.getElementById('doubleBtn');
+            const splitBtn = document.getElementById('splitBtn');
             
             if (myTurn) {
                 actionButtons.classList.remove('hidden');
-                msgEl.textContent = state.isHost ? 'Ваш ход (вскрытие)' : 'Ваш ход!';
-                msgEl.style.color = '#90EE90';
+                
+                // Проверяем можно ли сплит
+                const canSplit = !state.isHost && data.your_hand && 
+                               data.your_hand.cards.length === 2 && 
+                               !data.split_hands.hands &&
+                               data.your_hand.cards[0].value === data.your_hand.cards[1].value &&
+                               data.balances[state.seat] >= data.bets[state.seat];
+                
+                if (canSplit) {
+                    splitBtn.classList.remove('hidden');
+                } else {
+                    splitBtn.classList.add('hidden');
+                }
                 
                 if (!state.isHost && state.canDouble && data.balances[state.seat] >= data.bets[state.seat]) {
                     doubleBtn.classList.remove('hidden');
                 } else {
                     doubleBtn.classList.add('hidden');
+                }
+                
+                // Обновляем сообщение о текущей руке при сплите
+                if (data.split_hands && data.split_hands.hands) {
+                    const currentHand = data.split_hands.current_idx + 1;
+                    msgEl.textContent = `Рука ${currentHand}/${data.split_hands.hands.length} - Ваш ход!`;
+                    msgEl.style.color = '#90EE90';
+                } else {
+                    msgEl.textContent = 'Ваш ход!';
+                    msgEl.style.color = '#90EE90';
                 }
             } else {
                 actionButtons.classList.add('hidden');
@@ -1543,7 +1579,41 @@
                 }
             }
             
-            if (!state.isHost && data.your_hand && data.your_hand.cards) {
+            // Показываем сплит-руки если есть
+            if (!state.isHost && data.split_hands && data.split_hands.hands) {
+                const myCardsEl = document.getElementById(`cards-${state.seat}`);
+                myCardsEl.innerHTML = '';
+                
+                data.split_hands.hands.forEach((hand, idx) => {
+                    const handDiv = document.createElement('div');
+                    handDiv.style.cssText = 'display: flex; margin-bottom: 10px; position: relative; padding: 5px;';
+                    
+                    // Подсвечиваем активную руку
+                    if (idx === data.split_hands.current_idx) {
+                        handDiv.style.boxShadow = '0 0 15px #FFD700';
+                        handDiv.style.borderRadius = '8px';
+                        handDiv.style.background = 'rgba(255,215,0,0.1)';
+                    } else {
+                        handDiv.style.opacity = '0.6';
+                    }
+                    
+                    hand.cards.forEach(card => {
+                        handDiv.appendChild(createCard(card));
+                    });
+                    
+                    // Добавляем значение руки
+                    const valDiv = document.createElement('div');
+                    valDiv.style.cssText = 'position: absolute; right: -40px; top: 50%; transform: translateY(-50%); background: #1a5f1a; border: 2px solid #FFD700; color: #FFD700; min-width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.9rem;';
+                    valDiv.textContent = hand.value;
+                    handDiv.appendChild(valDiv);
+                    
+                    myCardsEl.appendChild(handDiv);
+                });
+                
+                const scoreEl = document.getElementById(`score-${state.seat}`);
+                scoreEl.textContent = data.split_hands.hands[data.split_hands.current_idx].value;
+                scoreEl.classList.remove('hidden');
+            } else if (!state.isHost && data.your_hand && data.your_hand.cards) {
                 const myCardsEl = document.getElementById(`cards-${state.seat}`);
                 myCardsEl.innerHTML = '';
                 data.your_hand.cards.forEach(card => {

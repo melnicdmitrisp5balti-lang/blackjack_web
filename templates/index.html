@@ -1612,7 +1612,7 @@
         <div class="roulette-header">
             <button class="back-btn" onclick="backToMenu()">← Меню</button>
             <h2 style="color: var(--primary-gold); font-size: clamp(1.1rem, 3.5vw, 1.6rem);">🎡 РУЛЕТКА</h2>
-            <div style="width: 60px;"></div>
+            <div class="settings-area" onclick="showRoulettePasswordModal()" style="position: static; width: clamp(35px, 8vw, 45px); height: clamp(35px, 8vw, 45px);"></div>
         </div>
         
         <div class="bets-toggle" onclick="toggleBetsPanel()">📋 Ставки</div>
@@ -1856,6 +1856,29 @@
         <button class="btn-primary" onclick="closeRigHostModal()" style="background: #444; color: white;">Закрыть</button>
     </div>
 </div>
+
+    <!-- Roulette Password Modal -->
+    <div class="modal-overlay" id="roulettePasswordModal">
+        <div class="modal-box">
+            <h3 class="modal-title">🔐 ВВОД ПАРОЛЯ</h3>
+            <input type="password" class="input-field" id="rouletteAdminPassword" placeholder="Пароль..." style="margin: 25px 0;">
+            <button class="btn-primary" onclick="checkRoulettePassword()">Войти</button>
+            <button class="btn-primary" onclick="closeRoulettePasswordModal()" style="background: #444; color: white; margin-top: 12px;">Отмена</button>
+        </div>
+    </div>
+    
+    <!-- Roulette Balance Modal -->
+    <div class="modal-overlay" id="rouletteBalanceModal">
+        <div class="modal-box">
+            <h3 class="modal-title">💰 БАЛАНС</h3>
+            <div style="margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.5); border-radius: 10px; border: 1px solid var(--primary-gold);">
+                <div style="color: #888; font-size: 0.9rem; margin-bottom: 8px;">Ваш баланс</div>
+                <input type="number" class="input-field" id="rouletteNewBalance" value="10000" min="1" style="margin: 0;">
+                <button class="btn-primary" onclick="setRouletteBalance()" style="margin-top: 10px;">Установить</button>
+            </div>
+            <button class="btn-primary" onclick="closeRouletteBalanceModal()" style="background: #444; color: white;">Закрыть</button>
+        </div>
+    </div>
 
     <script>
         const socket = io();
@@ -3004,6 +3027,43 @@
         });
         
         document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+
+        // Roulette admin functions
+        function showRoulettePasswordModal() {
+            document.getElementById('roulettePasswordModal').style.display = 'flex';
+            document.getElementById('rouletteAdminPassword').value = '';
+            setTimeout(() => document.getElementById('rouletteAdminPassword').focus(), 100);
+        }
+        
+        function closeRoulettePasswordModal() {
+            document.getElementById('roulettePasswordModal').style.display = 'none';
+        }
+        
+        function checkRoulettePassword() {
+            const pass = document.getElementById('rouletteAdminPassword').value;
+            if (pass === 'admin1') {
+                closeRoulettePasswordModal();
+                document.getElementById('rouletteNewBalance').value = rouletteState.balance;
+                document.getElementById('rouletteBalanceModal').style.display = 'flex';
+            } else {
+                alert('❌ Неверный пароль!');
+            }
+        }
+        
+        function closeRouletteBalanceModal() {
+            document.getElementById('rouletteBalanceModal').style.display = 'none';
+        }
+        
+        function setRouletteBalance() {
+            const amount = parseInt(document.getElementById('rouletteNewBalance').value) || 1000;
+            socket.emit('cheat_balance', { amount: amount });
+            closeRouletteBalanceModal();
+            alert('✅ Баланс обновлён!');
+        }
+        
+        document.getElementById('rouletteAdminPassword').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') checkRoulettePassword();
+        });
     </script>
 </body>
 </html>

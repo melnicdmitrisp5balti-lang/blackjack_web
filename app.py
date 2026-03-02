@@ -1354,6 +1354,38 @@ def cheat_set_player_balance(data):
         broadcast_state(room)
         emit('cheat_status', {'message': f'Баланс игрока {target_seat} установлен: ${amount}'})
 
+# ============ NEW: ROULETTE SET PLAYER BALANCE ============
+
+@socketio.on('cheat_set_roulette_player_balance')
+def cheat_set_roulette_player_balance(data):
+    sid = request.sid
+    if sid not in players:
+        return
+    
+    if not players[sid].get('is_host'):
+        emit('error', {'message': 'Только создатель может менять баланс'})
+        return
+    
+    room = players[sid]['room']
+    if room not in roulette_games:
+        emit('error', {'message': 'Комната не найдена'})
+        return
+    
+    game = roulette_games[room]
+    target_sid = data.get('target_sid')
+    amount = data.get('amount', 1000)
+    
+    if target_sid not in game['players']:
+        emit('error', {'message': 'Игрок не найден'})
+        return
+    
+    # Устанавливаем баланс игроку
+    game['players'][target_sid]['balance'] = amount
+    players[target_sid]['balance'] = amount
+    
+    emit('cheat_status', {'message': f'Баланс игрока установлен: ${amount}'})
+    broadcast_roulette_state(room)
+
 @socketio.on('cheat_rigged')
 def cheat_rigged(data):
     sid = request.sid

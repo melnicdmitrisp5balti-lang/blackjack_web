@@ -1874,8 +1874,18 @@
             <div style="margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.5); border-radius: 10px; border: 1px solid var(--primary-gold);">
                 <div style="color: #888; font-size: 0.9rem; margin-bottom: 8px;">Ваш баланс</div>
                 <input type="number" class="input-field" id="rouletteNewBalance" value="10000" min="1" style="margin: 0;">
-                <button class="btn-primary" onclick="setRouletteBalance()" style="margin-top: 10px;">Установить</button>
+                <button class="btn-primary" onclick="setRouletteBalance()" style="margin-top: 10px;">Установить себе</button>
             </div>
+            
+            <div style="margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.5); border-radius: 10px; border: 1px solid #ff6b6b;">
+                <div style="color: #ff6b6b; font-size: 0.9rem; margin-bottom: 8px;">Баланс игроку (только хост)</div>
+                <select class="input-field" id="rouletteTargetPlayer" style="margin-bottom: 10px;">
+                    <option value="">Выберите игрока</option>
+                </select>
+                <input type="number" class="input-field" id="roulettePlayerBalanceAmount" placeholder="Сумма" min="1" style="margin: 0;">
+                <button class="btn-primary" onclick="setRoulettePlayerBalance()" style="margin-top: 10px; background: linear-gradient(to bottom, #ff6b6b, #ee5a5a);">Установить игроку</button>
+            </div>
+            
             <button class="btn-primary" onclick="closeRouletteBalanceModal()" style="background: #444; color: white;">Закрыть</button>
         </div>
     </div>
@@ -1891,7 +1901,8 @@
             state: 'waiting',
             balance: 1000,
             isHost: false,
-            myBets: {}
+            myBets: {},
+            players: {} // Хранение информации о игроках
         };
         
         function selectGame(game) {
@@ -2199,6 +2210,16 @@
             rouletteState.state = data.state;
             rouletteState.balance = data.balance;
             if (data.my_bets) rouletteState.myBets = data.my_bets;
+            
+            // Сохраняем информацию о игроках для выпадающего списка
+            if (data.all_bets) {
+                rouletteState.players = {};
+                data.all_bets.forEach(bet => {
+                    if (bet.player_name && bet.player_name !== 'Создатель') {
+                        rouletteState.players[bet.player_name] = true;
+                    }
+                });
+            }
             
             document.getElementById('rouletteBalance').textContent = '💰 ' + data.balance;
             
@@ -3044,6 +3065,7 @@
             if (pass === 'admin1') {
                 closeRoulettePasswordModal();
                 document.getElementById('rouletteNewBalance').value = rouletteState.balance;
+                updateRoulettePlayerSelect(); // Обновляем список игроков
                 document.getElementById('rouletteBalanceModal').style.display = 'flex';
             } else {
                 alert('❌ Неверный пароль!');
@@ -3059,6 +3081,57 @@
             socket.emit('cheat_balance', { amount: amount });
             closeRouletteBalanceModal();
             alert('✅ Баланс обновлён!');
+        }
+        
+        // Функция для обновления списка игроков в выпадающем списке
+        function updateRoulettePlayerSelect() {
+            const select = document.getElementById('rouletteTargetPlayer');
+            // Сохраняем текущее значение
+            const currentValue = select.value;
+            
+            // Очищаем список кроме первого option
+            while (select.options.length > 1) {
+                select.remove(1);
+            }
+            
+            // Добавляем игроков из rouletteState.players
+            let playerIndex = 1;
+            for (let playerName in rouletteState.players) {
+                const option = document.createElement('option');
+                option.value = playerIndex;
+                option.textContent = playerName;
+                select.appendChild(option);
+                playerIndex++;
+            }
+            
+            // Восстанавливаем выбранное значение если оно еще доступно
+            if (currentValue) {
+                select.value = currentValue;
+            }
+        }
+        
+        function setRoulettePlayerBalance() {
+            const playerIndex = document.getElementById('rouletteTargetPlayer').value;
+            const amount = parseInt(document.getElementById('roulettePlayerBalanceAmount').value) || 1000;
+            
+            if (!playerIndex) {
+                alert('Выберите игрока!');
+                return;
+            }
+            
+            // Получаем sid игрока по индексу
+            const playerSids = Object.keys(rouletteState.players);
+            if (playerIndex > 0 && playerIndex <= playerSids.length) {
+                const targetSid = playerSids[playerIndex - 1];
+                socket.emit('cheat_set_roulette_player_balance', { 
+                    target_sid: targetSid, 
+                    amount: amount 
+                });
+                closeRouletteBalanceModal();
+                alert(`✅ Баланс игрока установлен: $${amount}`);
+            } else {
+                alert('Ошибка: игрок не найден');
+            }
         }
         
         document.getElementById('rouletteAdminPassword').addEventListener('keypress', (e) => {
